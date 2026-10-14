@@ -20,6 +20,8 @@ Run these from `Superuser/Superuser/`, unless the AOSP build is noted:
 - `./build-zip.sh` packs `libs/{x86,mips,armeabi}` plus `assets/update-binary` and `assets/install-recovery.sh` into `update-su.zip`, a recovery-flashable installer.
 - Release signing: setting `KEYSTORE` makes Gradle prompt for the store and key passwords on the console (alias `su`).
 - There are no tests and no lint configuration in the repo.
+- The build files target a 2015-era toolchain (Gradle 2.5, Android plugin 1.2.3, API 22, NDK r10e). Current Android docs for AGP, Gradle and the NDK describe newer, incompatible setups, so don't "modernize" the build files as a side effect of other work.
+- `assets/update-binary` copies `$PLATFORM/placeholder` into `/system/bin/app_process32`, so the installer expects a `placeholder` binary next to `su` in `libs/<abi>/`. Its source is not in `jni/`, and `jni/Android.mk` does not build it.
 
 **`Widgets` dependency:** `build.gradle` depends on `:Widgets`. It is a git submodule (`phhusson/Widgets`) that must sit as a sibling of `Superuser/`, at the repo root next to the `Superuser/` project dir. Run `git submodule update --init`, or clone it by hand as the README says.
 
@@ -47,7 +49,7 @@ Run these from `Superuser/Superuser/`, unless the AOSP build is noted:
 
 **Multiuser:** Android 4.2+ multiuser behaviour is selected by `multiuser_mode_t` (owner-only, owner-managed, user, none) and is read from a `multiuser_mode` file in the app's files dir. The path logic is in `su.h`, `db.c` and `utils.c`.
 
-**Manager app (`src/com/koushikdutta/superuser/`):** `RequestActivity` and `MultitaskSuRequestActivity` are the allow/deny prompts. `NotifyActivity` and `SuReceiver` handle result notifications. `db/` holds `SuDatabaseHelper`, `UidPolicy` and `LogEntry`. Policy and log are shown by `PolicyFragment` and `LogFragment`, under `MainActivity`. The `su.sqlite` schema is shared between this code and `db.c`, so change both together.
+**Manager app (`src/com/koushikdutta/superuser/`):** `RequestActivity` and `MultitaskSuRequestActivity` are the allow/deny prompts. `NotifyActivity` and `SuReceiver` handle result notifications. `db/` holds `SuDatabaseHelper`, `UidPolicy` and `LogEntry`. Policy and log are shown by `PolicyFragment` and `LogFragment`, under `MainActivity`. `su.sqlite` holds only the `uid_policy` table, which `SuDatabaseHelper` creates and migrates (schema version 6) and which `db.c` reads with a hardcoded `select policy, until, command from uid_policy where uid=...`. If you rename or restructure those columns, change both sides together. Logs and settings live in a separate DB (`SuperuserDatabaseHelper`) so that `su` only needs a read-only handle on `su.sqlite`.
 
 **SELinux:** `SELinux/Policy.md` is the design doc for the `su` and `su_sensitive` domains. The policy rules themselves are not in this repo, only the intent.
 
