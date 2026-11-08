@@ -141,15 +141,15 @@ static void bind_remove_cb(void *arg, int uid, const char *src, const char *dst)
 int bind_remove(const char *path, int uid) {
     struct bind_remove_ctx ctx = { .path = path, .uid = uid, .fd = -1, .found = 0 };
 
-	unlink("/data/su/bind.new");
-	ctx.fd = open("/data/su/bind.new", O_WRONLY|O_CREAT, 0600);
+	unlink("/data/su/binds.new");
+	ctx.fd = open("/data/su/binds.new", O_WRONLY|O_CREAT, 0600);
 	if(ctx.fd<0)
 		return 0;
 
     bind_foreach(bind_remove_cb, &ctx);
 	close(ctx.fd);
-	unlink("/data/su/bind");
-	rename("/data/su/bind.new", "/data/su/bind");
+	unlink("/data/su/binds");
+	rename("/data/su/binds.new", "/data/su/binds");
 	return ctx.found;
 }
 
