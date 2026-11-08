@@ -23212,6 +23212,14 @@ static int openDirectory(const char*, int*);
 ** testing and sandboxing.  The following array holds the names and pointers
 ** to all overrideable system calls.
 */
+/*
+** Bionic's FORTIFY headers declare umask() as an overloaded function, so its
+** address cannot be taken directly. Call it through a plain wrapper instead.
+*/
+static mode_t posixUmask(mode_t mask){
+  return umask(mask);
+}
+
 static struct unix_syscall {
   const char *zName;            /* Name of the sytem call */
   sqlite3_syscall_ptr pCurrent; /* Current value of the system call */
@@ -23317,7 +23325,7 @@ static struct unix_syscall {
   { "fchown",       (sqlite3_syscall_ptr)posixFchown,     0 },
 #define osFchown    ((int(*)(int,uid_t,gid_t))aSyscall[20].pCurrent)
 
-  { "umask",        (sqlite3_syscall_ptr)umask,           0 },
+  { "umask",        (sqlite3_syscall_ptr)posixUmask,      0 },
 #define osUmask     ((mode_t(*)(mode_t))aSyscall[21].pCurrent)
 
 }; /* End of the overrideable system calls */

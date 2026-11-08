@@ -9,14 +9,21 @@ echo -n -e 'ui_print\n' > /proc/self/fd/$2
 # detect binary versions to install
 ARCH=$(uname -m)
 
-# x86 needs to match: i486, i686, x86_64, ...
-if echo "$ARCH" | grep -q 86; then
-  PLATFORM=x86
-elif [ "$ARCH" = "mips" -o "$ARCH" = "mips64" ]; then
-  PLATFORM=mips
-else
-  PLATFORM=armeabi
-fi
+# Directory names match the NDK ABIs built by jni/Application.mk.
+case "$ARCH" in
+  x86_64)
+    PLATFORM=x86_64
+    ;;
+  *86*)
+    PLATFORM=x86
+    ;;
+  aarch64|arm64*)
+    PLATFORM=arm64-v8a
+    ;;
+  *)
+    PLATFORM=armeabi-v7a
+    ;;
+esac
 
 cd /tmp
 mkdir superuser
@@ -58,7 +65,7 @@ if [ "$BUILD_VERSION_SDK" -le 18 ];then
 	umount /system
 	exit 1
 fi
-if [ -f "/system/etc/.has_su_daemon" ]
+if [ -f "/system/etc/.has_su_daemon" ]; then
 	echo -n -e "ui_print Your ROM already has a root, I don't want to override it.\n" > /proc/self/fd/$2
 	umount /system
 	exit 1

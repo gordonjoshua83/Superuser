@@ -10,8 +10,10 @@ LOCAL_MODULE := su
 LOCAL_MODULE_TAGS := eng debug optional
 LOCAL_LDFLAGS := -static
 LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_STATIC_LIBRARIES := libc libcutils libselinux
-LOCAL_C_INCLUDES := jni/libselinux/include/ jni/libsepol/include/ jni/sqlite3/
+# libc and libcutils only exist in an AOSP tree. The NDK links libc on its
+# own, and the one libcutils helper su needs comes from compat/.
+LOCAL_STATIC_LIBRARIES := libselinux
+LOCAL_C_INCLUDES := $(my_path)/libselinux/include/ $(my_path)/libsepol/include/ $(my_path)/sqlite3/ $(my_path)/compat/
 LOCAL_SRC_FILES := su/su.c su/daemon.c su/activity.c su/db.c su/utils.c su/pts.c sqlite3/sqlite3.c su/hacks.c su/binds.c
 LOCAL_CFLAGS := -DSQLITE_OMIT_LOAD_EXTENSION -std=gnu11
 

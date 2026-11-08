@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.library'
+}
+
+def widgetsDir = new File(rootDir, '../Widgets/Widgets')
+if (!new File(widgetsDir, 'src').isDirectory()) {
+    throw new GradleException("Widgets submodule is missing. Run: git submodule update --init")
+}
+
+android {
+    namespace = 'com.koushikdutta.widgets'
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 21
+    }
+
+    sourceSets {
+        main {
+            // The submodule's manifest still sets package=, which current AGP
+            // rejects; use an equivalent manifest without it.
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = [new File(widgetsDir, 'src')]
+            res.srcDirs = [new File(widgetsDir, 'res')]
+        }
+    }
+
+    lint {
+        abortOnError = false
+    }
+}
+
+dependencies {
+    api fileTree(dir: new File(widgetsDir, 'libs'), include: '*.jar')
+}

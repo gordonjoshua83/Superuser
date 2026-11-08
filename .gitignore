@@ -8,3 +8,6 @@ gen
 .settings
 libs
 build
+.gradle
+.cxx
+.kotlin

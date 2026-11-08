@@ -1,61 +1,88 @@
-task wrapper(type: Wrapper) {
-    gradleVersion = '2.5'
-}
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:1.2.3'
-    }
-}
-apply plugin: 'com.android.application'
-
-repositories {
-    mavenCentral()
+plugins {
+    id 'com.android.application' version '9.5.1'
+    id 'com.android.library' version '9.5.1' apply false
 }
 
 dependencies {
-    compile project(':Widgets')
+    implementation project(':Widgets')
 }
 
+def packageNameFile = file('packageName')
+
 android {
-    packagingOptions {
-        exclude 'META-INF/beans.xml'
+    namespace = 'com.koushikdutta.superuser'
+    compileSdk = 36
+    ndkVersion = '29.0.14206865'
+
+    defaultConfig {
+        // The su binary only talks to the app under this package name, so
+        // keep them in sync via the shared packageName file.
+        if (packageNameFile.exists())
+            applicationId = packageNameFile.text.trim()
+        minSdk = 21
+        // Android 15+ refuses to install apps targeting below API 24. Going
+        // past 25 would bring background broadcast limits that break
+        // PackageChangeReceiver, so stay at the lowest installable level.
+        targetSdk = 24
+        versionCode = 1033
+        versionName = '1.0.3.3'
     }
 
     signingConfigs {
         release {
-			if(System.getenv("KEYSTORE") != null) {
-	        storeFile file(System.getenv("KEYSTORE"))
-				storePassword new String(System.console().readPassword("\n\$ Enter store password: "))
-				keyAlias "su"
-				keyPassword new String(System.console().readPassword("\n\$ Enter key password: "))
-			}
+            if (System.getenv("KEYSTORE") != null) {
+                storeFile = file(System.getenv("KEYSTORE"))
+                storePassword = new String(System.console().readPassword("\n\$ Enter store password: "))
+                keyAlias = "su"
+                keyPassword = new String(System.console().readPassword("\n\$ Enter key password: "))
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (System.getenv("KEYSTORE") != null)
+                signingConfig = signingConfigs.release
         }
     }
 
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
-            jniLibs.srcDirs = ['libs']
             assets.srcDirs = ['assets/']
             res.srcDirs = ['res/']
             java.srcDirs = ['src/']
-            aidl.srcDirs = ['src/']
         }
     }
 
-    compileSdkVersion 22
-    buildToolsVersion '22.0.1'
-
-    defaultConfig {
-        File f = new File("packageName")
-        minSdkVersion 14
-        targetSdkVersion 22
-        if(f.exists())
-            applicationId f.text
-        signingConfig signingConfigs.release
+    packaging {
+        resources {
+            excludes += 'META-INF/beans.xml'
+        }
     }
+
+    lint {
+        // Legacy codebase; report lint issues without failing the build.
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+}
+
+// Builds the su binary for every ABI in jni/Application.mk into libs/<abi>/su
+// using the NDK version pinned above. build-zip.sh packages those binaries.
+def ndkDir = androidComponents.sdkComponents.ndkDirectory
+
+tasks.register('buildSu', Exec) {
+    group = 'build'
+    description = 'Builds the su binary with ndk-build into libs/<abi>/su'
+    workingDir = projectDir
+    args '-j', Runtime.runtime.availableProcessors().toString()
+    doFirst {
+        executable = ndkDir.get().file('ndk-build').asFile.absolutePath
+    }
+}
+
+tasks.register('cleanSu', Delete) {
+    group = 'build'
+    delete 'libs', 'obj'
 }
