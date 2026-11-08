@@ -40,7 +40,7 @@
 int bind_foreach(bind_cb cb, void* arg) {
     int res = 0;
     char *str = NULL;
-	int fd = open("/data/su/binds", O_RDONLY);
+	int fd = open(BINDS_FILE, O_RDONLY);
     if(fd<0)
         return 1;
 
@@ -141,15 +141,23 @@ static void bind_remove_cb(void *arg, int uid, const char *src, const char *dst)
 int bind_remove(const char *path, int uid) {
     struct bind_remove_ctx ctx = { .path = path, .uid = uid, .fd = -1, .found = 0 };
 
-	unlink("/data/su/bind.new");
-	ctx.fd = open("/data/su/bind.new", O_WRONLY|O_CREAT, 0600);
+	unlink(BINDS_FILE ".new");
+	ctx.fd = open(BINDS_FILE ".new", O_WRONLY|O_CREAT|O_TRUNC, 0600);
 	if(ctx.fd<0)
 		return 0;
 
-    bind_foreach(bind_remove_cb, &ctx);
+	// Don't replace the list with a partial copy if it couldn't be parsed
+	if(!bind_foreach(bind_remove_cb, &ctx) || fsync(ctx.fd) != 0) {
+		close(ctx.fd);
+		unlink(BINDS_FILE ".new");
+		return 0;
+	}
 	close(ctx.fd);
-	unlink("/data/su/bind");
-	rename("/data/su/bind.new", "/data/su/bind");
+	// rename() atomically replaces BINDS_FILE; readers see the old or new list
+	if(rename(BINDS_FILE ".new", BINDS_FILE) != 0) {
+		unlink(BINDS_FILE ".new");
+		return 0;
+	}
 	return ctx.found;
 }
 
