@@ -14,28 +14,34 @@
 
 ## Checking out the source
 
-You'll need the "Widgets" dependency.
+The "Widgets" dependency is a git submodule:
 
-* $ mkdir /path/to/src
-* $ cd /path/to/src
-* $ git clone git://github.com/phhusson/Superuser
-* $ cd Superuser
-* $ git clone git://github.com/phhusson/Widgets
+* $ git clone --recursive https://github.com/phhusson/Superuser
+* $ cd Superuser/Superuser
+
+If you already cloned without `--recursive`, run `git submodule update --init`.
 
 These repositories do not keep the actual projects in the top level directory.
 This is because they contain tests, libs, and samples.
 
-Make sure the SDK Platform for API 19 is installed, through the Android SDK Manager.  Install NDK Revision 10e from [here](http://developer.android.com/tools/sdk/ndk/index.html). -- follow the download, archived link. It might work with newer as well, but definitely works with 10e.
+## Requirements
 
-## Building the su and placeholder binaries
+* JDK 17 or newer
+* Android SDK with platform `android-36`, plus NDK `29.0.14206865`
+  (`sdkmanager "platforms;android-36" "ndk;29.0.14206865"`)
+* Point `ANDROID_HOME` (or `sdk.dir` in `Superuser/local.properties`) at the SDK
 
-Make sure you have the android-ndk downloaded with the tool "ndk-build" in your path.
+Gradle is fetched by the wrapper (`./gradlew`, Gradle 9.9 with Android Gradle Plugin 9.5).
 
-* $ cd /path/to/src/
+## Building the su binary
+
 * $ cd Superuser/Superuser
-* $ ndk-build
+* $ ./gradlew buildSu
 
-The su binary will built into Superuser/Superuser/libs/armeabi/su, and the placeholder will be built into Superuser/Superuser/libs/armeabi/placeholder
+This runs `ndk-build` from the pinned NDK and writes `libs/<abi>/su` for
+`armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`. (`armeabi` and `mips` are no
+longer supported by the NDK.) `./build-zip.sh` then packages those binaries into
+a flashable `update-su.zip`.
 
 ## Building the application
 
@@ -43,15 +49,12 @@ The su binary will built into Superuser/Superuser/libs/armeabi/su, and the place
 
 (Yes I use debug builds for the moment.)
 
-#### Configuring the Package Name
-//The Superuser distributed on Google Play is in the package name com.koushikdutta.superuser. (To be changed)
-To prevent conflicts with the Play store version, the build process changes the package
-name to com.thirdparty.superuser. You can configure this value by setting the following
-in your build.gradle
+The APK is written to `build/outputs/apk/debug/`.
 
-```
-applicationId "com.thirdparty.superuser"
-```
+#### Configuring the Package Name
+The application ID is read from the `Superuser/packageName` file, which is also
+compiled into the su binary as the only app it will talk to. Edit that file to
+change the package name, then rebuild both the app and su.
 
 ## How to install?
 

@@ -1,2 +1,22 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'Superuser'
+
+// The Widgets git submodule still ships a 2015-era build.gradle that current
+// Gradle cannot evaluate, so it is built through the wrapper module in
+// widgets/, which points at the submodule's sources.
 include ':Widgets'
-project(':Widgets').projectDir = new File(settingsDir, '../Widgets/Widgets')
+project(':Widgets').projectDir = new File(settingsDir, 'widgets')

@@ -46,7 +46,6 @@ import com.koushikdutta.superuser.db.UidPolicy;
 import com.koushikdutta.superuser.util.Settings;
 import com.koushikdutta.superuser.util.SuHelper;
 
-import junit.framework.Assert;
 
 import java.io.DataInputStream;
 import java.io.File;
@@ -100,7 +99,8 @@ public class MultitaskSuRequestActivity extends Activity {
     }
 
     void handleAction(boolean action, Integer until) {
-        Assert.assertTrue(!mHandled);
+        if (mHandled)
+            throw new AssertionError("su request already handled");
         mHandled = true;
         try {
             mSocket.getOutputStream().write((action ? "socket:ALLOW" : "socket:DENY").getBytes());

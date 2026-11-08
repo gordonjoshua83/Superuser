@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stand-in for ../Widgets/Widgets/AndroidManifest.xml without the package
+     attribute; the namespace is set in build.gradle. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application />
+</manifest>

@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <getopt.h>
 #include <strings.h>
 #include <stdint.h>
@@ -83,65 +84,73 @@ error:
     return res;
 }
 
-int bind_uniq_dst(const char *dst) {
-    static int _res;
-    static const char *_dst;
+/*
+ * The callbacks below used to be GCC nested functions, which clang (the only
+ * NDK compiler) does not support. They now take their state through `arg`.
+ */
+struct bind_uniq_ctx {
+    const char *dst;
+    int res;
+};
 
-	_res = 1;
-    _dst = dst;
-    auto void cb(void *arg, int uid, const char *src, const char *dst) {
-        if(strcmp(dst, _dst) == 0)
-            _res = 0;
-    }
-    if(!bind_foreach(cb, NULL))
+static void bind_uniq_dst_cb(void *arg, int uid, const char *src, const char *dst) {
+    struct bind_uniq_ctx *ctx = arg;
+    if(strcmp(dst, ctx->dst) == 0)
+        ctx->res = 0;
+}
+
+int bind_uniq_dst(const char *dst) {
+    struct bind_uniq_ctx ctx = { .dst = dst, .res = 1 };
+    if(!bind_foreach(bind_uniq_dst_cb, &ctx))
         return 0;
-    return _res;
+    return ctx.res;
+}
+
+static void bind_ls_cb(void *arg, int uid, const char *src, const char *dst) {
+    int caller_uid = *(int *)arg;
+	if(caller_uid == 0 || caller_uid == 2000 || caller_uid == uid) {
+		fprintf(stderr, "%d %s => %s\n", uid, src, dst);
+	}
 }
 
 void bind_ls(int uid) {
-    static int _uid;
-	_uid=uid;
-    auto void cb(void *arg, int uid, const char *src, const char *dst) {
-		if(_uid == 0 || _uid == 2000 || _uid == uid) {
-			fprintf(stderr, "%d %s => %s\n", uid, src, dst);
-		}
-    }
-    bind_foreach(cb, NULL);
+    bind_foreach(bind_ls_cb, &uid);
+}
+
+struct bind_remove_ctx {
+    const char *path;
+    int uid;
+    int fd;
+    int found;
+};
+
+static void bind_remove_cb(void *arg, int uid, const char *src, const char *dst) {
+    struct bind_remove_ctx *ctx = arg;
+	//The one we want to drop
+    if(strcmp(dst, ctx->path) == 0 &&
+			(ctx->uid == 0 || ctx->uid == 2000 || ctx->uid == uid)) {
+		ctx->found = 1;
+		return;
+	}
+	char *str = NULL;
+	int len = asprintf(&str, "%d:%s:%s", uid, src, dst);
+	write(ctx->fd, str, len+1); //len doesn't include final \0 and we want to write it
+	free(str);
 }
 
 int bind_remove(const char *path, int uid) {
-	static int _found = 0;
-    static const char *_path;
-	static int _fd;
-	static int _uid;
-
-
-	_path = path;
-	_found = 0;
-	_uid = uid;
+    struct bind_remove_ctx ctx = { .path = path, .uid = uid, .fd = -1, .found = 0 };
 
 	unlink("/data/su/bind.new");
-	_fd = open("/data/su/bind.new", O_WRONLY|O_CREAT, 0600);
-	if(_fd<0)
+	ctx.fd = open("/data/su/bind.new", O_WRONLY|O_CREAT, 0600);
+	if(ctx.fd<0)
 		return 0;
 
-    auto void cb(void *arg, int uid, const char *src, const char *dst) {
-		//The one we want to drop
-        if(strcmp(dst, _path) == 0 &&
-				(_uid == 0 || _uid == 2000 || _uid == uid)) {
-			_found = 1;
-			return;
-		}
-		char *str = NULL;
-		int len = asprintf(&str, "%d:%s:%s", uid, src, dst);
-		write(_fd, str, len+1); //len doesn't include final \0 and we want to write it
-		free(str);
-    }
-    bind_foreach(cb, NULL);
-	close(_fd);
+    bind_foreach(bind_remove_cb, &ctx);
+	close(ctx.fd);
 	unlink("/data/su/bind");
 	rename("/data/su/bind.new", "/data/su/bind");
-	return _found;
+	return ctx.found;
 }
 
 int init_foreach(init_cb icb, void* arg) {
@@ -186,61 +195,66 @@ error:
     return res;
 }
 
-int init_uniq(const char *path) {
-    static int _res;
-    static const char *_path;
+struct init_uniq_ctx {
+    const char *path;
+    int res;
+};
 
-	_res = 1;
-    _path = path;
-    auto void cb(void *arg, int uid, const char *path) {
-        if(strcmp(path, _path) == 0)
-            _res = 0;
-    }
-    if(!init_foreach(cb, NULL))
+static void init_uniq_cb(void *arg, int uid, const char *path) {
+    struct init_uniq_ctx *ctx = arg;
+    if(strcmp(path, ctx->path) == 0)
+        ctx->res = 0;
+}
+
+int init_uniq(const char *path) {
+    struct init_uniq_ctx ctx = { .path = path, .res = 1 };
+    if(!init_foreach(init_uniq_cb, &ctx))
         return 0;
-    return _res;
+    return ctx.res;
+}
+
+struct init_remove_ctx {
+    const char *path;
+    int uid;
+    int fd;
+    int found;
+};
+
+static void init_remove_cb(void *arg, int uid, const char *path) {
+    struct init_remove_ctx *ctx = arg;
+	//The one we want to drop
+    if(strcmp(path, ctx->path) == 0 &&
+			(ctx->uid == 0 || ctx->uid == 2000 || uid == ctx->uid)) {
+		ctx->found = 1;
+		return;
+	}
+	char *str = NULL;
+	int len = asprintf(&str, "%d:%s", uid, path);
+	write(ctx->fd, str, len+1); //len doesn't include final \0 and we want to write it
+	free(str);
 }
 
 int init_remove(const char *path, int uid) {
-	static int _found = 0;
-    static const char *_path;
-	static int fd;
-	static int _uid;
-
-	_path = path;
-	_found = 0;
-	_uid = uid;
+    struct init_remove_ctx ctx = { .path = path, .uid = uid, .fd = -1, .found = 0 };
 
 	unlink("/data/su/init.new");
-	fd = open("/data/su/init.new", O_WRONLY|O_CREAT, 0600);
-	if(fd<0)
+	ctx.fd = open("/data/su/init.new", O_WRONLY|O_CREAT, 0600);
+	if(ctx.fd<0)
 		return 0;
 
-    auto void cb(void *arg, int uid, const char *path) {
-		//The one we want to drop
-        if(strcmp(path, _path) == 0 &&
-				(_uid == 0 || _uid == 2000 || uid == _uid)) {
-			_found = 1;
-			return;
-		}
-		char *str = NULL;
-		int len = asprintf(&str, "%d:%s", uid, path);
-		write(fd, str, len+1); //len doesn't include final \0 and we want to write it
-		free(str);
-    }
-    init_foreach(cb, NULL);
-	close(fd);
+    init_foreach(init_remove_cb, &ctx);
+	close(ctx.fd);
 	unlink("/data/su/init");
 	rename("/data/su/init.new", "/data/su/init");
-	return _found;
+	return ctx.found;
+}
+
+static void init_ls_cb(void *arg, int uid, const char *path) {
+    int caller_uid = *(int *)arg;
+	if(caller_uid == 2000 || caller_uid == 0 || caller_uid == uid)
+		fprintf(stderr, "%d %s\n", uid, path);
 }
 
 void init_ls(int uid) {
-	static int _uid;
-	_uid = uid;
-    auto void cb(void *arg, int uid, const char *path) {
-		if(_uid == 2000 || _uid == 0 || _uid == uid)
-			fprintf(stderr, "%d %s\n", uid, path);
-    }
-    init_foreach(cb, NULL);
+    init_foreach(init_ls_cb, &uid);
 }

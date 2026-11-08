@@ -499,71 +499,73 @@ static void prepare_su_bind() {
 	}
 }
 
+static int bind_counter = 0;
+
+static void prepare_binds_cb(void *arg, int uid, const char *src, const char *dst) {
+	int ret = 0;
+
+	char *tmpfile = NULL;
+	asprintf(&tmpfile, "/dev/su/bind%d", bind_counter++);
+	struct stat stbuf;
+	ret = stat(src, &stbuf);
+	if(ret) {
+		free(tmpfile);
+		LOGE("Failed to stat src %s file", src);
+		return;
+	}
+
+	//Only shell uid is allowed to bind files not his own
+	if(uid != 2000 && uid != stbuf.st_uid) {
+		LOGE("File %s has wrong owner: %d vs %d", src, uid, stbuf.st_uid);
+		return;
+	}
+
+	ret = copy_file(src, tmpfile, 0);
+	if(ret) {
+		free(tmpfile);
+		PLOGE("Failed to copy su");
+		return;
+	}
+	chmod(tmpfile, stbuf.st_mode);
+
+	ret = setfilecon(tmpfile, "u:object_r:system_file:s0");
+	if(ret) {
+		LOGE("Failed to set file context");
+		return;
+	}
+
+	ret = mount(tmpfile, dst, "", MS_BIND, NULL);
+	if(ret) {
+		LOGE("Failed to mount bind");
+		return;
+	}
+}
+
 static void prepare_binds() {
 	mkdir("/data/su", 0700);
-	static int i = 0;
+	bind_foreach(prepare_binds_cb, NULL);
+}
 
-	auto void cb(void *arg, int uid, const char *src, const char *dst) {
-		int ret = 0;
+static void do_init_cb(void *arg, int uid, const char *path) {
+	int ret = 0;
 
-		char *tmpfile = NULL;
-		asprintf(&tmpfile, "/dev/su/bind%d", i++);
-		struct stat stbuf;
-		ret = stat(src, &stbuf);
-		if(ret) {
-			free(tmpfile);
-			LOGE("Failed to stat src %s file", src);
-			return;
-		}
+	int p = fork();
+	if(p)
+		return;
 
-		//Only shell uid is allowed to bind files not his own
-		if(uid != 2000 && uid != stbuf.st_uid) {
-			LOGE("File %s has wrong owner: %d vs %d", src, uid, stbuf.st_uid);
-			return;
-		}
+	while(access("/system/bin/sh", R_OK)) sleep(1);
+	ret = setexeccon("u:r:su:s0");
+	execl(path, path, NULL);
+	LOGE("Failed to execute %s. Trying as shell script, ret = %d", path, ret);
 
-		ret = copy_file(src, tmpfile, 0);
-		if(ret) {
-			free(tmpfile);
-			PLOGE("Failed to copy su");
-			return;
-		}
-		chmod(tmpfile, stbuf.st_mode);
-
-		ret = setfilecon(tmpfile, "u:object_r:system_file:s0");
-		if(ret) {
-			LOGE("Failed to set file context");
-			return;
-		}
-
-		ret = mount(tmpfile, dst, "", MS_BIND, NULL);
-		if(ret) {
-			LOGE("Failed to mount bind");
-			return;
-		}
-	}
-	bind_foreach(cb, NULL);
+	ret = setexeccon("u:r:su:s0");
+	execl("/system/bin/sh", "/system/bin/sh", path, NULL);
+	LOGE("Failed to execute %s as shell script", path);
+	_exit(1);
 }
 
 static void do_init() {
-	auto void cb(void *arg, int uid, const char *path) {
-		int ret = 0;
-
-		int p = fork();
-		if(p)
-			return;
-
-		while(access("/system/bin/sh", R_OK)) sleep(1);
-		ret = setexeccon("u:r:su:s0");
-		execl(path, path, NULL);
-		LOGE("Failed to execute %s. Trying as shell script, ret = %d", path, ret);
-
-		ret = setexeccon("u:r:su:s0");
-		execl("/system/bin/sh", "/system/bin/sh", path, NULL);
-		LOGE("Failed to execute %s as shell script", path);
-		_exit(1);
-	}
-	init_foreach(cb, NULL);
+	init_foreach(do_init_cb, NULL);
 }
 
 static void prepare() {
